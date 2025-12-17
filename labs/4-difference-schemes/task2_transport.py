@@ -153,7 +153,7 @@ for r in r_values:
     ax2.set_ylim([0, 6])
 
     plt.tight_layout()
-    filename = f'task2_r_{r:.2f}.png'.replace('.', '_')
+    filename = f'task2_r_{r:.2f}'.replace('.', '_')
     plt.savefig(filename, dpi=150, bbox_inches='tight')
     print(f"  График сохранён: {filename}")
     print()
