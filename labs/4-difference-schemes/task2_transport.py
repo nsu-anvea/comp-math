@@ -15,7 +15,7 @@ def initial_condition(x):
 
 def exact_solution(x, t, a):
     x_shifted = x - a * t
-    return initial_condition(x_shifted)
+    return np.where(x_shifted <= 3, 5.0, 1.0)
 
 
 def godunov_scheme(u0, x, a, h, tau, num_steps):
@@ -25,11 +25,12 @@ def godunov_scheme(u0, x, a, h, tau, num_steps):
 
     for n in range(num_steps):
         u_new = np.zeros(nx)
-        for i in range(nx):
-            if i == 0:
-                u_new[i] = u[i] - (a * tau / h) * (u[i] - u[-1])
-            else:
-                u_new[i] = u[i] - (a * tau / h) * (u[i] - u[i - 1])
+
+        u_new[0] = 5.0
+
+        for i in range(1, nx):
+            u_new[i] = u[i] - (a * tau / h) * (u[i] - u[i - 1])
+
         u = u_new.copy()
         u_history.append(u.copy())
 
@@ -47,18 +48,16 @@ def implicit_symmetric_scheme(u0, x, a, h, tau, num_steps):
         A = np.zeros((nx, nx))
         b = u.copy()
 
-        for i in range(nx):
-            A[i, i] = 1.0
+        A[0, 0] = 1.0
+        b[0] = 5.0
 
-            if i == 0:
-                A[i, 1] = -r / 2
-                A[i, -1] = r / 2
-            elif i == nx - 1:
-                A[i, 0] = -r / 2
-                A[i, -2] = r / 2
-            else:
-                A[i, i + 1] = -r / 2
-                A[i, i - 1] = r / 2
+        for i in range(1, nx - 1):
+            A[i, i - 1] = -r / 2
+            A[i, i] = 1.0
+            A[i, i + 1] = r / 2
+
+        A[nx - 1, nx - 2] = -r / 2
+        A[nx - 1, nx - 1] = 1.0 + r / 2
 
         u_new = np.linalg.solve(A, b)
         u = u_new.copy()
@@ -79,6 +78,7 @@ print(f"  Скорость переноса: a = {a}")
 print(f"  Начальные условия: u(x,0) = 5 при x ≤ 3, u(x,0) = 1 при x > 3")
 print(f"  Значения r = a*tau/h: {r_values}")
 print(f"  Моменты времени: T = {T_values}")
+print(f"  Граничные условия: u(0,t) = 5 (входящая волна слева)")
 print()
 
 for r in r_values:
@@ -122,6 +122,8 @@ for r in r_values:
         if T == 0:
             ax1.plot(x, u_exact, color=colors[idx], linestyle='-', linewidth=2,
                      label=f'T = {T} (начальные условия)')
+            ax2.plot(x, u_exact, color=colors[idx], linestyle='-', linewidth=2,
+                     label=f'T = {T} (начальные условия)')
         else:
             ax1.plot(x, u_exact, color=colors[idx], linestyle='--', linewidth=2,
                      label=f'T = {T} (точное)', alpha=0.7)
@@ -129,23 +131,29 @@ for r in r_values:
                      markersize=4, linestyle='-', linewidth=1.5,
                      label=f'T = {T} (численное)', markevery=5)
 
-        if T == 0:
-            ax2.plot(x, u_exact, color=colors[idx], linestyle='-', linewidth=2,
-                     label=f'T = {T} (начальные условия)')
-        else:
             ax2.plot(x, u_exact, color=colors[idx], linestyle='--', linewidth=2,
                      label=f'T = {T} (точное)', alpha=0.7)
             ax2.plot(x, u_implicit_final, color=colors[idx], marker=markers[idx],
                      markersize=4, linestyle='-', linewidth=1.5,
                      label=f'T = {T} (численное)', markevery=5)
 
-        if T > 0:
-            error_godunov = np.max(np.abs(u_godunov_final - u_exact))
-            error_implicit = np.max(np.abs(u_implicit_final - u_exact))
+            error_godunov_l1 = np.mean(np.abs(u_godunov_final - u_exact)) * h
+            error_godunov_l2 = np.sqrt(np.sum((u_godunov_final - u_exact) ** 2) * h)
+            error_godunov_max = np.max(np.abs(u_godunov_final - u_exact))
+
+            error_implicit_l1 = np.mean(np.abs(u_implicit_final - u_exact)) * h
+            error_implicit_l2 = np.sqrt(np.sum((u_implicit_final - u_exact) ** 2) * h)
+            error_implicit_max = np.max(np.abs(u_implicit_final - u_exact))
 
             print(f"  T = {T}:")
-            print(f"    Годунов: максимальная ошибка = {error_godunov:.6f}")
-            print(f"    Неявная: максимальная ошибка = {error_implicit:.6f}")
+            print(f"    Годунов:")
+            print(f"      L1-норма ошибки:  {error_godunov_l1:.6f}")
+            print(f"      L2-норма ошибки:  {error_godunov_l2:.6f}")
+            print(f"      Макс. ошибка:     {error_godunov_max:.6f}")
+            print(f"    Неявная:")
+            print(f"      L1-норма ошибки:  {error_implicit_l1:.6f}")
+            print(f"      L2-норма ошибки:  {error_implicit_l2:.6f}")
+            print(f"      Макс. ошибка:     {error_implicit_max:.6f}")
 
     ax1.legend(loc='best', fontsize=10)
     ax2.legend(loc='best', fontsize=10)
@@ -153,11 +161,27 @@ for r in r_values:
     ax2.set_ylim([0, 6])
 
     plt.tight_layout()
-    filename = f'task2_r_{r:.2f}'.replace('.', '_')
+    filename = f'task2_r_{r:.2f}.png'.replace('.', '_')
     plt.savefig(filename, dpi=150, bbox_inches='tight')
     print(f"  График сохранён: {filename}")
     print()
 
     plt.show()
 
+print("=" * 80)
+print()
+print("АНАЛИЗ РЕЗУЛЬТАТОВ:")
+print()
+print("1. Схема Годунова:")
+print("   - Устойчива при r ≤ 1 (условие Куранта)")
+print("   - При r = 1 даёт точное решение (отсутствие численной диффузии)")
+print("   - При r < 1 наблюдается размазывание фронта")
+print("   - При r > 1 схема неустойчива")
+print()
+print("2. Неявная симметричная схема:")
+print("   - Безусловно устойчива (для любого r)")
+print("   - Имеет дисперсионные ошибки (осцилляции)")
+print("   - Не монотонна - появляются выбросы на разрывах")
+print("   - Центральная разность приводит к осцилляциям Гиббса")
+print()
 print("=" * 80)
